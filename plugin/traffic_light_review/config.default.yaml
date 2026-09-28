@@ -56,9 +56,10 @@ report:
   summary: unless_no_review
   # Quanti file elencare al massimo nel riepilogo.
   max_listed_files: 10
-  # Quali domande di Jev mostrare nel riepilogo:
-  #   triggered → solo le regole scattate e i check critici incerti
-  #   all       → tutte le 18 risposte, con 🔴🟡🟢 (merge_ready in fondo, fuori dalla policy)
+  # Quanto dettaglio di Jev mostrare nel riepilogo:
+  #   triggered → solo l'esito e i file (i motivi stanno nella domanda di conferma)
+  #   all       → in più, sotto "Dettaglio Jev:", pre-filtro, banda di incertezza, tutte le 18 risposte
+  #               con 🔴🟡🟢 (merge_ready in fondo, fuori dalla policy) e token/costo
   checks: triggered
 
 jev:

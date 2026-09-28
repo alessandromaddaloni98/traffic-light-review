@@ -12,8 +12,8 @@
 🟢 nessuna review necessaria → silenzio. 🔴 review consigliata → Claude ti chiede se avviarla.
 
 ```
-Ho rilevato modifiche su 3 file dall'ultima review (+120 / −40): autenticazione/permessi 0.91.
-Consiglio una review: la avvio?
+Consiglio una review delle modifiche dall'ultima review (3 file, +120 −20): autenticazione/permessi (0.91),
+rischio injection da verificare, test mancanti. La avvio?
 ```
 
 - **Zero attrito**: niente commit, niente push, nessun file nella working tree. Basta una repo git, anche solo `git init`.
@@ -54,6 +54,60 @@ Consiglio una review: la avvio?
 5. **Review, solo con il tuo sì.** Il subagent `traffic-light-review:reviewer` (sola lettura) verifica prima i punti segnalati da Jev, poi applica la regola OCR di ogni file e riporta i problemi `critical`, `high` e `medium`.
 
 La baseline avanza quando una review viene proposta (accettata o rifiutata) o quando il diff supera `prefilter.max_lines`: così le modifiche piccole non si perdono e il diff non cresce senza limite.
+
+## Cosa vedi
+
+A fine turno la prima riga dice l'esito; sotto, i file contati dall'ultima review. Totali e file sono gli stessi nel riepilogo e nella domanda; lockfile e minificati (`prefilter.ignore_paths`) stanno su una riga a parte e non contano.
+
+**🔴 Review consigliata.** Il riepilogo dice *dove*: `←` segna i file con un indizio per la regola scattata. Il *perché* sta solo nella domanda di Claude: le regole con la probabilità di Jev, poi a parole i check incerti e le aggravanti.
+
+```
+🔴 traffic-light-review · review consigliata · 3 file, +120 −20
+   src/api/users.py     M  +30 −10
+   src/auth/login.py    M  +80 −10  ← autenticazione/permessi
+   tests/test_login.py  A  +10 −0  ← autenticazione/permessi
+   ignorati (1): package-lock.json
+```
+> Consiglio una review delle modifiche dall'ultima review (3 file, +120 −20): autenticazione/permessi (0.91), rischio injection da verificare, test mancanti. La avvio?
+
+**🟢 Nessuna review necessaria.** Silenzio totale. Con `report.summary: always` compare comunque il riepilogo:
+
+```
+🟢 traffic-light-review · nessuna review necessaria · 3 file, +120 −20
+   src/api/users.py     M  +30 −10
+   src/auth/login.py    M  +80 −10
+   tests/test_login.py  A  +10 −0
+   ignorati (1): package-lock.json
+```
+
+**⚪ Sotto soglia.** Jev non viene chiamato; le righe si accumulano fino al turno che supera `prefilter.min_lines`.
+
+```
+⚪ traffic-light-review · sotto soglia (4 < 10), accumulo · 1 file, +4 −0
+   src/api/users.py  M  +4 −0
+```
+
+**⚪ Jev non disponibile.** Errore di rete o dell'API: nessun verdetto, la baseline resta ferma e il turno dopo riprova.
+
+```
+⚪ traffic-light-review · triage saltato: TypeSafeAPIError (HTTP 503) · 3 file, +120 −20
+   src/api/users.py     M  +30 −10
+   src/auth/login.py    M  +80 −10
+   tests/test_login.py  A  +10 −0
+   ignorati (1): package-lock.json
+```
+
+Se il diff era troppo grande per Jev, in fondo ai file compare `⚠️ Jev ha visto solo parte del diff: 1 file omesso, 2 troncati`. Con `/traffic-light-review:config set report.checks all` si aggiunge un blocco `Dettaglio Jev:` con pre-filtro, banda di incertezza, tutte le 18 risposte e il costo, utile per tarare le soglie.
+
+**Verdetto del subagent.** Se confermi, dopo la review torna al massimo 15 righe, per esempio:
+
+```
+Review: 🔴 2 problemi
+- [high/security] src/auth/login.py:42 — la sessione non scade mai → impostare una scadenza e controllarla in validate_session
+- [medium/test] tests/test_login.py:1 — nessun caso con password errata → aggiungere un test che si aspetta il rifiuto
+Focus Jev: touches_auth confermato, injection_risk escluso, adds_tests confermato
+Copertura: 3/3 file
+```
 
 ## Configurazione
 

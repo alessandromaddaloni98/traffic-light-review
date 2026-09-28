@@ -38,7 +38,7 @@ If the folder does not exist, reply only: `Nessuna review in attesa.`
 Write the verdict in Italian, no preamble, no pasted code, at most **15 lines**. Format:
 
 ```
-Review: <✅ nessun problema bloccante | ⚠️ N problemi>
+Review: <🟢 nessun problema bloccante | 🔴 N problemi>
 - [<severity>/<category>] <path>:<riga> — <problema> → <correzione suggerita>[ (richiesto dall'utente)]
 Focus Jev: <check> <confermato | escluso>[, …]
 Copertura: <revisionati>/<totali> file[; saltati: <path> (<motivo>)]

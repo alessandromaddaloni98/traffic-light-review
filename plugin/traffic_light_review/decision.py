@@ -19,6 +19,7 @@ class Hit:
     value: float
     rule: str  # es. "hardcoded_secret ≥ 0.7"
     aggravating: bool  # regola aggravante: non fa proporre la review da sola
+    op: str = "gte"  # operatore della regola: con lte su un check higher_is_better il motivo usa label_low
 
 
 @dataclass
@@ -32,7 +33,8 @@ class Decision:
 def decide(answers: JevAnswers, cfg: DecisionConfig) -> Decision:
     values = answers.values
     hits = [
-        Hit(check=r.when.check, value=values[r.when.check], rule=str(r.when), aggravating=aggravating)
+        Hit(check=r.when.check, value=values[r.when.check], rule=str(r.when), aggravating=aggravating,
+            op=r.when.op)
         for aggravating, rules in ((False, cfg.review), (True, cfg.aggravating))
         for r in rules
         if r.fires(values)
@@ -53,25 +55,30 @@ def fmt_value(name: str, value: float) -> str:
     return f"{value:.1f}/{check.levels - 1}" if check.type == "score" else f"{value:.2f}"
 
 
-def _hit_text(hit: Hit) -> str:
-    return f"{CHECKS[hit.check].label} {fmt_value(hit.check, hit.value)}"
+def hit_label(hit: Hit) -> str:
+    """Etichetta di una regola scattata: label_low se scatta sul valore basso di un check dove alto è buono."""
+    check = CHECKS[hit.check]
+    if hit.op == "lte" and check.higher_is_better and check.label_low:
+        return check.label_low
+    return check.label
 
 
 def reasons(decision: Decision) -> List[str]:
-    """Motivi della review in italiano: regole scattate, check incerti, aggravanti."""
+    """Motivi della review in italiano: regole con il valore, poi check incerti e aggravanti a parole.
+
+    Ogni check compare una volta sola, nella prima forma: un check sopra soglia e dentro la banda è una regola.
+    """
     if not decision.review:
         return []
-    top = [_hit_text(h) for h in decision.hits if not h.aggravating]
-    uncertain = [f"{CHECKS[n].label} {p:.2f} (incerto)" for n, p in decision.uncertain.items()]
-    worse = [f"{_hit_text(h)} (aggravante)" for h in decision.hits if h.aggravating]
-    return top + uncertain + worse
-
-
-def describe(decision: Decision) -> str:
-    """Riga di verdetto, es. "🔴 Jev: review consigliata (credenziale nel codice 0.91)"."""
-    if not decision.review:
-        return "🟢 Jev: nessuna review necessaria"
-    return f"🔴 Jev: review consigliata ({'; '.join(reasons(decision))})"
+    items = [(h.check, f"{hit_label(h)} ({fmt_value(h.check, h.value)})") for h in decision.hits if not h.aggravating]
+    items += [(n, f"{CHECKS[n].label} da verificare") for n in decision.uncertain]
+    items += [(h.check, hit_label(h)) for h in decision.hits if h.aggravating]
+    result, seen = [], set()
+    for name, text in items:
+        if name not in seen:
+            seen.add(name)
+            result.append(text)
+    return result
 
 
 def uncertainty_line(decision: Decision) -> str:

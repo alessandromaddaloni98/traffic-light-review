@@ -28,6 +28,7 @@ class Check:
     policy: bool = True  # False: la domanda non può comparire nelle regole (merge_ready)
     ocr_category: str = "other"
     ocr_categories: Optional[Dict[str, str]] = None  # solo choice: categoria OCR di ogni opzione
+    label_low: Optional[str] = None  # etichetta quando scatta una regola lte su un check higher_is_better
     path_patterns: Tuple[str, ...] = ()
     content_patterns: Tuple[re.Pattern, ...] = ()
 
@@ -59,6 +60,7 @@ def _load() -> Tuple[str, Dict[str, Check]]:
             policy=spec.get("policy", True),
             ocr_category=spec.get("ocr_category", "other"),
             ocr_categories=spec.get("ocr_categories"),
+            label_low=spec.get("label_low"),
             path_patterns=tuple(patterns.get("paths", ())),
             content_patterns=tuple(re.compile(p) for p in patterns.get("content", ())),
         )

@@ -16,9 +16,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from traffic_light_review import baseline, jev, pending
-from traffic_light_review.config import Config, ConfigError, ReportConfig, load_config
-from traffic_light_review.decision import Decision, all_checks, decide, describe, uncertainty_line, reasons
-from traffic_light_review.diff import DiffSummary, hunks, numstat
+from traffic_light_review.config import Config, ConfigError, load_config
+from traffic_light_review.decision import Decision, all_checks, decide, hit_label, uncertainty_line, reasons
+from traffic_light_review.diff import hunks, numstat
 from traffic_light_review.files import TooManyFiles, iter_code_files
 from traffic_light_review.prefilter import PrefilterResult, run_prefilter
 
@@ -81,42 +81,91 @@ def _fmt_count(n):
     return "bin" if n is None else str(n)
 
 
-def format_summary(
-    summary: DiffSummary, pre: PrefilterResult, cfg: ReportConfig, triage: Optional[Triage] = None
-) -> str:
-    n = len(summary.files)
-    label = "file modificato" if n == 1 else "file modificati"
-    lines = [f"traffic-light-review: {n} {label} dall'ultima review (+{summary.added} / −{summary.deleted})"]
-    # L'avviso di diff troncato va in cima: un verdetto su un diff parziale non deve passare inosservato.
+# Rientro delle righe sotto l'intestazione: il testo parte sotto la "t" di traffic-light-review.
+INDENT = "   "
+# Path ignorati elencati per nome nel riepilogo.
+MAX_LISTED_IGNORED = 3
+
+
+def _totals(pre: PrefilterResult) -> str:
+    """File e righe contati dal pre-filtro, uguali nel riepilogo e nella domanda di conferma."""
+    added = sum(f.added or 0 for f in pre.counted)
+    deleted = sum(f.deleted or 0 for f in pre.counted)
+    return f"{len(pre.counted)} file, +{added} −{deleted}"
+
+
+def _heading(pre: PrefilterResult, config: Config, triage: Optional[Triage]) -> str:
+    if not pre.counted:
+        return f"⚪ traffic-light-review · solo file ignorati ({len(pre.ignored)})"
+    if not pre.passed:
+        outcome = f"⚪ traffic-light-review · sotto soglia ({pre.lines} < {config.prefilter.min_lines}), accumulo"
+    elif triage.decision is None:
+        outcome = f"⚪ traffic-light-review · triage saltato: {triage.unavailable}"
+    elif triage.decision.review:
+        outcome = "🔴 traffic-light-review · review consigliata"
+    else:
+        outcome = "🟢 traffic-light-review · nessuna review necessaria"
+    return f"{outcome} · {_totals(pre)}"
+
+
+def _file_tags(triage: Optional[Triage]) -> Dict[str, List[str]]:
+    """Path → etichette delle regole di review scattate sui check critici per cui il file ha un indizio."""
+    tags: Dict[str, List[str]] = {}
+    if triage is None or triage.decision is None or not triage.decision.review:
+        return tags
+    for hit in triage.decision.hits:
+        if hit.aggravating:
+            continue
+        for path in triage.relevant.get(hit.check, ()):
+            labels = tags.setdefault(path, [])
+            if hit_label(hit) not in labels:
+                labels.append(hit_label(hit))
+    return tags
+
+
+def format_summary(pre: PrefilterResult, config: Config, triage: Optional[Triage] = None) -> str:
+    """Riepilogo a fine turno: intestazione con l'esito, file contati, file ignorati, avvisi, dettaglio di Jev."""
+    cfg = config.report
+    body = []
+    listed = pre.counted[:cfg.max_listed_files]
+    width = max((len(f.path) for f in listed), default=0)
+    tags = _file_tags(triage)
+    for f in listed:
+        tag = f"  ← {', '.join(tags[f.path])}" if f.path in tags else ""
+        body.append(f"{f.path.ljust(width)}  {f.status}  +{_fmt_count(f.added)} −{_fmt_count(f.deleted)}{tag}")
+    if len(pre.counted) > len(listed):
+        body.append(f"… e altri {len(pre.counted) - len(listed)}")
+    if pre.ignored:
+        names = [f.path for f in pre.ignored[:MAX_LISTED_IGNORED]]
+        more = ", …" if len(pre.ignored) > MAX_LISTED_IGNORED else ""
+        body.append(f"ignorati ({len(pre.ignored)}): {', '.join(names)}{more}")
     if triage is not None and triage.warning:
-        lines.insert(0, triage.warning)
-    ignored = {id(f) for f in pre.ignored}
-    for f in summary.files[:cfg.max_listed_files]:
-        tag = "  (ignorato)" if id(f) in ignored else ""
-        lines.append(f"  {f.status} {f.path}  +{_fmt_count(f.added)} −{_fmt_count(f.deleted)}{tag}")
-    if n > cfg.max_listed_files:
-        lines.append(f"  … e altri {n - cfg.max_listed_files}")
-    lines.append(f"Pre-filtro: {pre.reason} → {'triage Jev' if pre.passed else 'nessun triage'}")
-    if triage is not None:
-        lines += triage.lines
-    return "\n".join(lines)
+        body.append(triage.warning)
+    if cfg.checks == "all":
+        body += ["Dettaglio Jev:", f"  pre-filtro: {pre.reason}"]
+        if triage is not None:
+            body += triage.details
+    return "\n".join([_heading(pre, config, triage)] + [INDENT + line for line in body])
 
 
 def _truncation_warning(payload: dict) -> Optional[str]:
-    omitted, truncated = payload["omitted_files"], payload["truncated_files"]
-    if not omitted and not truncated:
+    counts = [(payload["omitted_files"], "omesso", "omessi"), (payload["truncated_files"], "troncato", "troncati")]
+    parts = [f"{n} {one if n == 1 else many}" for n, one, many in counts if n]
+    if not parts:
         return None
-    return (f"⚠️ Jev ha visto solo parte del diff: {omitted} file omessi, {truncated} troncati. "
-            f"Il verdetto riguarda solo la parte inviata.")
+    # "file" solo dopo il primo numero: "1 file omesso, 2 troncati".
+    parts[0] = parts[0].replace(" ", " file ", 1)
+    return f"⚠️ Jev ha visto solo parte del diff: {', '.join(parts)}"
 
 
 @dataclasses.dataclass
 class Triage:
     warning: Optional[str]  # diff troncato per Jev
-    lines: List[str]  # righe per il riepilogo
     relevant: Dict[str, List[str]]  # check critico → file con un indizio
     decision: Optional[Decision] = None  # None se Jev non risponde
     answers: Optional[jev.JevAnswers] = None
+    unavailable: Optional[str] = None  # perché Jev non ha risposto
+    details: List[str] = dataclasses.field(default_factory=list)  # righe di "Dettaglio Jev:" (report.checks: all)
 
 
 def _triage(
@@ -130,7 +179,7 @@ def _triage(
     try:
         answers = jev.ask(payload, config.jev)
     except jev.JevUnavailable as exc:
-        return Triage(warning, [f"Jev non disponibile: {exc}"], relevant)
+        return Triage(warning, relevant, unavailable=str(exc))
     decision = decide(answers, config.decision)
     cost = jev.cost_usd(answers)
     record = {
@@ -152,13 +201,12 @@ def _triage(
     (state / LAST_TRIAGE_FILE).write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     _append_log(state / TRIAGE_LOG_FILE, record)
 
-    lines = [describe(decision), uncertainty_line(decision)]
-    if config.report.checks == "all":
-        lines += all_checks(answers, decision)
+    # all_checks ha già due spazi di rientro, come le altre righe del dettaglio.
+    details = [f"  {uncertainty_line(decision)}"] + all_checks(answers, decision)
     tokens = answers.usage.get("input_tokens")
     if tokens:
-        lines.append(f"Jev: {tokens} token, ${cost:.4f}")
-    return Triage(warning, lines, relevant, decision, answers)
+        details.append(f"  costo: {tokens} token, ${cost:.4f}")
+    return Triage(warning, relevant, decision, answers, details=details)
 
 
 def _append_log(path: Path, record: dict) -> None:
@@ -172,11 +220,9 @@ def _append_log(path: Path, record: dict) -> None:
 
 def block_reason(decision: Decision, pre: PrefilterResult, pending_dir: Path) -> str:
     """Istruzioni per Claude: proporre la review e avviarla solo se l'utente conferma."""
-    added = sum(f.added or 0 for f in pre.counted)
-    deleted = sum(f.deleted or 0 for f in pre.counted)
     question = (
-        f"Ho rilevato modifiche su {len(pre.counted)} file dall'ultima review (+{added} / −{deleted}): {'; '.join(reasons(decision))}. "
-        f"Consiglio una review: la avvio?"
+        f"Consiglio una review delle modifiche dall'ultima review ({_totals(pre)}): "
+        f"{', '.join(reasons(decision))}. La avvio?"
     )
     return (
         f"traffic-light-review: Jev consiglia una review delle modifiche dall'ultima review. "
@@ -259,7 +305,7 @@ def run(hook_input: dict) -> dict:
             or (mode == "unless_no_review" and not no_review)
             or (mode == "above_threshold" and pre.passed)
         ):
-            output["systemMessage"] = format_summary(summary, pre, config.report, triage)
+            output["systemMessage"] = format_summary(pre, config, triage)
         if decision is not None and decision.review:
             # Review proposta: accettata o rifiutata, il diff successivo riparte da qui.
             baseline.write_baseline(repo, tree_now)
