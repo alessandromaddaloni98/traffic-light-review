@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/traffic-lighter.png" alt="Un semaforo con la lente d'ingrandimento che controlla il codice" width="320">
+</p>
+
 # traffic-light-review 🚦
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -39,15 +43,9 @@ Consiglio una review: la avvio?
 
 ## Come funziona
 
-```
-fine turno ─▶ git diff dall'ultima review ─▶ pre-filtro ─▶ Jev (18 domande) ─▶ regole
-                                                                                  │
-                                           🟢 silenzio ◀──── no ───────────────────┤
-                                           🔴 "la avvio?" ◀─ sì ───────────────────┘
-                                                  │ confermi
-                                                  ▼
-                                    subagent reviewer ─▶ verdetto ≤ 15 righe
-```
+<p align="center">
+  <img src="docs/flusso.svg" alt="Flusso: fine turno, diff dall'ultima review, pre-filtro, Jev, regole; no = silenzio, sì = Claude chiede se avviare la review; se confermi, un subagent in sola lettura restituisce il verdetto" width="880">
+</p>
 
 1. **Diff accumulato.** Lo Stop hook calcola il tree dei file di codice su un indice git separato e lo confronta con quello dell'ultima review proposta. I turni non ancora rivisti si sommano; l'indice e lo staging della repo non vengono toccati.
 2. **Pre-filtro.** Sotto `prefilter.min_lines` righe, o se cambiano solo lockfile e file minificati, Jev non viene chiamato.
