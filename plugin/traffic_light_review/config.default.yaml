@@ -1,0 +1,103 @@
+# Configurazione di default di traffic_light_review.
+# Per cambiarla in una repo usa /traffic-light-review:config dalla chat (es. set prefilter.min_lines 20):
+# le chiavi personali finiscono in .git/traffic_light_review/config.yaml, nessun file nella root del progetto.
+# Le liste sostituiscono quelle di default, non si sommano.
+#
+# Pattern dei path (exclude_paths, ignore_paths):
+#   - senza "/"  → confronta il nome di file o cartella a qualsiasi profondità ("*.lock", "generated")
+#   - con "/"    → confronta il path relativo alla root ("src/legacy/*", "**/fixtures/*")
+#   - "*" attraversa anche le "/"
+
+files:
+  # I candidati vengono da git ls-files, quindi i .gitignore del progetto valgono sempre.
+  # Estensioni considerate codice: solo questi file entrano nel diff.
+  include_extensions: [
+    .py, .pyi,
+    .js, .jsx, .mjs, .cjs, .ts, .tsx, .vue, .svelte,
+    .java, .kt, .kts, .scala, .go, .rs, .rb, .php,
+    .c, .h, .cc, .cpp, .hpp, .cs, .swift, .m,
+    .sh, .bash, .zsh, .sql,
+    .html, .css, .scss,
+    .json, .yaml, .yml, .toml, .ini, .cfg,
+  ]
+  # Cartelle mai scritte a mano, escluse anche senza .gitignore (es. dopo un git init).
+  # Il resto (data, dist, build, vendor…) lo decide il .gitignore del progetto.
+  exclude_dirs: [
+    .git, .hg, .svn,
+    node_modules, .venv, venv, __pycache__,
+    .mypy_cache, .pytest_cache, .ruff_cache, .tox,
+    .next, .idea, .gradle, .terraform,
+  ]
+  # Path esclusi in più (pattern).
+  exclude_paths: []
+  # File più grandi di così non sono codice scritto a mano (dataset, bundle, pesi).
+  max_file_kb: 1000
+  # Oltre questo numero di file esaminati (tutti quelli di git ls-files, non solo quelli di codice)
+  # il triage si disattiva: evita che l'hook scorra a ogni turno una repo enorme.
+  max_scanned_files: 50000
+
+prefilter:
+  # Sotto questo numero di righe cambiate (+ e −, sui file contati) Jev non viene chiamato.
+  min_lines: 10
+  # Righe accumulate dall'ultima review oltre le quali la baseline riparte in silenzio, dopo il giudizio di Jev.
+  max_lines: 400
+  # File che compaiono nel riepilogo ma non contano per la soglia.
+  ignore_paths: [
+    "*.lock", package-lock.json, pnpm-lock.yaml, yarn.lock, poetry.lock, uv.lock,
+    "*.min.js", "*.min.css", "*.map",
+  ]
+
+report:
+  # Quando mostrare il riepilogo file/righe a fine turno:
+  #   always           → a ogni turno con modifiche
+  #   unless_no_review → a ogni turno con modifiche, tranne quando Jev non consiglia la review (silenzio totale)
+  #   above_threshold  → solo se il pre-filtro passa
+  #   never            → mai
+  summary: unless_no_review
+  # Quanti file elencare al massimo nel riepilogo.
+  max_listed_files: 10
+  # Quali domande di Jev mostrare nel riepilogo:
+  #   triggered → solo le regole scattate e i check critici incerti
+  #   all       → tutte le 18 risposte, con 🔴🟡🟢 (merge_ready in fondo, fuori dalla policy)
+  checks: triggered
+
+jev:
+  # La API key si legge solo dalla variabile d'ambiente TYPESAFE_API_KEY: non va mai scritta qui.
+  # Modello Jev. Fissa una versione (es. jev-1.13.0) per risultati riproducibili.
+  model: jev-latest
+  # Timeout della richiesta in secondi (un solo retry). Deve stare sotto il timeout dell'hook (60 s).
+  timeout_s: 20
+
+decision:
+  # Regole della policy: {check, op, value[, unless]}. op è gte (>=) o lte (<=).
+  # value è una probabilità 0–1 per le domande sì/no. Per gli score (blast_radius 0–3, reviewer_effort 0–2)
+  # Jev dà il valore atteso, la media dei livelli pesata per le probabilità (es. 1.7), non il livello:
+  # "livello almeno N" si scrive quindi N − 0.5 (2.5 = arrotondato fa 3). unless è una condizione, o una lista:
+  # se una vale, la regola non scatta. Ogni check ha la sua soglia: un errore su un segreto
+  # non costa come un errore su un print dimenticato.
+  #
+  # Review: se scatta almeno una regola, Claude propone la review e la avvia solo se l'utente conferma.
+  review:
+    - {check: hardcoded_secret, op: gte, value: 0.7}
+    - {check: injection_risk, op: gte, value: 0.7}
+    - {check: unsafe_api, op: gte, value: 0.7}
+    - {check: weakens_tests, op: gte, value: 0.8}
+    - {check: breaks_api, op: gte, value: 0.6}
+    - {check: data_migration, op: gte, value: 0.6}
+    - {check: touches_auth, op: gte, value: 0.8}
+    - {check: error_handling, op: gte, value: 0.8}
+    - {check: python_pitfall, op: gte, value: 0.8}
+    - {check: resource_leak, op: gte, value: 0.8}
+    - {check: blast_radius, op: gte, value: 2.5}
+    - {check: reviewer_effort, op: gte, value: 1.5}
+  # Aggravanti: da sole non fanno proporre nessuna review. Se la review viene proposta per altri motivi,
+  # compaiono tra i motivi e nel focus del subagent. adds_tests sta qui perché quasi nessun turno
+  # aggiunge test: come regola della review la farebbe proporre quasi sempre.
+  aggravating:
+    - {check: debug_leftovers, op: gte, value: 0.7}
+    - {check: perf_hotspot, op: gte, value: 0.8}
+    - {check: adds_tests, op: lte, value: 0.2, unless: {check: docs_only, op: gte, value: 0.5}}
+  # Banda di incertezza: un check critico con probabilità qui dentro non è stato deciso da Jev.
+  # Da solo non fa proporre la review; se la review parte per altri motivi, compare nel focus come "Jev incerto".
+  uncertainty_low: 0.35
+  uncertainty_high: 0.65

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --script \"${CLAUDE_PLUGIN_ROOT}/scripts/stop_hook.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

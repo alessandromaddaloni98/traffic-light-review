@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+.pytest_cache/
+.DS_Store
+
+# Note di lavoro e skill personali, fuori dalla repo pubblica
+spec/
+.claude/skills/spec-ale/
+tests/
+CLAUDE.md
+appunti.txt

@@ -1,0 +1,15 @@
+{
+  "name": "traffic-light-review",
+  "description": "Marketplace di traffic-light-review: triage delle modifiche con Jev e code review con le regole di Open Code Review.",
+  "owner": {
+    "name": "Alessandro Maddaloni",
+    "url": "https://github.com/alessandromaddaloni98"
+  },
+  "plugins": [
+    {
+      "name": "traffic-light-review",
+      "source": "./plugin",
+      "description": "Triage automatico delle modifiche di ogni turno con Jev e code review su conferma, con le regole di Open Code Review."
+    }
+  ]
+}

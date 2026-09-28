@@ -1,0 +1,20 @@
+{
+  "name": "traffic-light-review",
+  "displayName": "traffic-light-review",
+  "version": "0.1.0",
+  "description": "A fine turno misura il codice cambiato e chiede a Jev (TypeSafe AI) se serve una code review, e la avvia solo dopo la tua conferma. La review gira in un subagent con le regole di Open Code Review.",
+  "author": {
+    "name": "Alessandro Maddaloni",
+    "url": "https://github.com/alessandromaddaloni98"
+  },
+  "homepage": "https://github.com/alessandromaddaloni98/traffic-light-review",
+  "repository": "https://github.com/alessandromaddaloni98/traffic-light-review",
+  "license": "MIT",
+  "keywords": [
+    "code-review",
+    "hooks",
+    "jev",
+    "typesafe",
+    "open-code-review"
+  ]
+}

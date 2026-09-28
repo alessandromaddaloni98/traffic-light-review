@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/alibaba/open-code-review",
+  "tag": "v1.12.9",
+  "commit": "bccbc15f785269400735d5255540c231e6c02b6d",
+  "path": "internal/config/rules"
+}
