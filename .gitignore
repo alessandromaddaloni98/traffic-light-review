@@ -10,4 +10,5 @@ spec/
 .claude/skills/spec-ale/
 tests/
 CLAUDE.md
+.claude
 appunti.txt
