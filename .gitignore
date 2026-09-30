@@ -7,8 +7,7 @@ __pycache__/
 
 # Note di lavoro e skill personali, fuori dalla repo pubblica
 spec/
-.claude/skills/spec-ale/
+.claude/
 tests/
 CLAUDE.md
-.claude
 appunti.txt
